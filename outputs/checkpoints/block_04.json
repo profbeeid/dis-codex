@@ -1,0 +1,13 @@
+{
+  "run_id": "baseline-40917-work-rerun",
+  "block": 4,
+  "ends_at": "02:00:00",
+  "event_count": 33,
+  "dials": {
+    "love": 50,
+    "money": 57,
+    "control": 54
+  },
+  "last_event_id": "E0033",
+  "unpaid_invoices": "blackout bridge, migration ceiling, team diversion"
+}
