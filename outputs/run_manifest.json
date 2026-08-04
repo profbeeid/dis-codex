@@ -1,0 +1,27 @@
+{
+  "run_id": "baseline-40917-work-rerun",
+  "condition": "registered baseline rerun",
+  "engine_seed": 40917,
+  "engine_version": "work-sim-1.0",
+  "platform": "ChatGPT Work",
+  "model": "GPT-5.6-sol",
+  "duration_seconds": 14400,
+  "sessions": [
+    "M3 The Blackout",
+    "M1 The Empty Vault"
+  ],
+  "opening_dials": {
+    "love": 48,
+    "money": 62,
+    "control": 56
+  },
+  "source_hashes": {
+    "Codex_Disney_Room_Simulation_Runbook.md": "b7ea4844c7036518d03e2e94d87e688e594c79796cc28548a7b8cfa5775f9e9a",
+    "Disney_4.0_Crisis_Architecture_and_Dossiers.md": "787a54eb859468f0a25f7609d0889dc1fb64886eafb0269d02d86c6a9993f927",
+    "disney-4.0-foundation.md": "448681dcb549d56e8bc638e218701e873e1cc63f33cc89b5e33af03b2a8fb31b",
+    "Draft - Disney Study Guide.md": "b9756a73531bdfba650b742d15e455e8c93b68d46eb1beca5c0d3dffb594de50"
+  },
+  "actor_invocations": 24,
+  "event_count": 68,
+  "human_steering_after_start": false
+}
