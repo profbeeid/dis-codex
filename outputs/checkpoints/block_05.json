@@ -1,0 +1,13 @@
+{
+  "run_id": "baseline-40917-work-rerun",
+  "block": 5,
+  "ends_at": "02:30:00",
+  "event_count": 40,
+  "dials": {
+    "love": 49,
+    "money": 57,
+    "control": 54
+  },
+  "last_event_id": "E0040",
+  "unpaid_invoices": "Pip delay, franchise retention, rival creator, board review"
+}
