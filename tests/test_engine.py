@@ -13,6 +13,7 @@ class EngineTests(unittest.TestCase):
         result = engine.step(lambda actor, packet: {"decision": "wait", "channel": "none"})
         self.assertIsNone(result)
         self.assertEqual(engine.events, [])
+        self.assertEqual(engine.invocations[0]["response"]["decision"], "wait")
 
         engine.schedule_actor("JOSH", 20)
         result = engine.step(lambda actor, packet: {
@@ -47,15 +48,28 @@ class EngineTests(unittest.TestCase):
                 "knowledge_source_ids": ["secret"]
             })
 
+    def test_hidden_world_values_stay_out_of_actor_packet(self):
+        engine = Engine(1)
+        engine.set_value("public_direction", "money down", public=True)
+        engine.set_value("jordan_tolerance", 91, holders=["JORDAN"])
+        self.assertEqual(engine.actor_packet("JOSH")["visible_values"], {"public_direction": "money down"})
+        self.assertEqual(engine.actor_packet("JORDAN")["visible_values"]["jordan_tolerance"], 91)
+
     def test_card_becomes_eligible_but_does_not_auto_fire(self):
         engine = Engine(1)
         engine.add_card(Card("C1", "Deadline", "clock", {"at": 30}, "The deadline lands."))
-        engine.schedule_actor("JOSH", 30)
-        engine.step(lambda actor, packet: {"decision": "wait", "channel": "none"})
+        engine.advance_to(30)
         self.assertEqual(engine.cards["C1"].status, "eligible")
         self.assertEqual(engine.events, [])
         event = engine.fire_card("C1")
         self.assertEqual(event.data["card_id"], "C1")
+
+    def test_frozen_card_trigger_cannot_be_changed(self):
+        engine = Engine(1)
+        engine.add_card(Card("C1", "Deadline", "clock", {"at": 30}, "Deadline."))
+        engine.cards["C1"].trigger["at"] = 5
+        with self.assertRaises(SimulationError):
+            engine.evaluate_cards()
 
     def test_reserve_card_waits_until_no_problem_is_live(self):
         engine = Engine(1)
@@ -113,4 +127,3 @@ class EngineTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
