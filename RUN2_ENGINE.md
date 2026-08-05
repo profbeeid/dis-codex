@@ -30,5 +30,4 @@ Run mechanics tests with:
 python -m unittest discover -s tests -v
 ```
 
-The tests do not simulate Disney. They prove that actors choose their own action, private information stays private, cards do not auto-fire, directives enter a FIFO queue, checkpoints resume deterministically, and output views derive from the event ledger.
-
+The tests do not simulate Disney. They prove that actors choose their own action, actual packets and returns are stored, private information stays private, frozen card triggers cannot drift, cards do not auto-fire, directives enter a FIFO queue, checkpoints resume deterministically, and output views derive from the event ledger.
