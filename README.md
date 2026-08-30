@@ -23,7 +23,7 @@ You do not need to memorise this page. Read it once in order before the first co
 
 ---
 
-## 1. The three sentences that run the game
+## The three sentences that run the game
 
 ### Nobody can finish anything alone
 
@@ -47,7 +47,7 @@ Your office brief prints the normal price of your yes. Read that line aloud. You
 
 ---
 
-## 2. What Disney is
+## What Disney is
 
 For this simulation, picture Disney as five businesses reaching into the same shelf of characters and worlds.
 
@@ -65,7 +65,7 @@ Finally, Disney's emotional connection with audiences is an economic resource. P
 
 ---
 
-## 3. What is on the table
+## What is on the table
 
 ### Use the words precisely
 
@@ -102,7 +102,7 @@ Question four usually points everybody back to the Calendar Item, where the defa
 
 ---
 
-## 4. Directives: how decisions become real
+## Directives: how decisions become real
 
 ### What a Directive contains
 
@@ -162,7 +162,7 @@ A verbal agreement does not change Disney. A private note does not change Disney
 
 ---
 
-## 5. The Override
+## The Override
 
 Each Office Brief contains one office-specific Override sentence:
 
@@ -184,7 +184,7 @@ An Override solves the immediate consent problem by damaging the exact people wh
 
 ---
 
-## 6. Promises, notes and hidden leverage
+## Promises, notes and hidden leverage
 
 ### Promise Notes
 
@@ -204,7 +204,7 @@ Only three Blackmail Items exist, held secretly by three delegates. A holder may
 
 ---
 
-## 7. Calendar Items and Crisis Items
+## Calendar Items and Crisis Items
 
 ### Calendar Items
 
@@ -231,7 +231,7 @@ Overrides cannot be used on Crisis Items. When one lands, find the NEEDS line an
 
 ---
 
-## 8. Committee sessions, months and Closes
+## Committee sessions, months and Closes
 
 ### Two clocks
 
@@ -298,7 +298,7 @@ When this was the final month of a comses, the comses ends. The next one begins 
 
 ---
 
-## 9. Damage, repair and breaking
+## Damage, repair and breaking
 
 A face-down Civ card remains in your pile but does nothing. Repairing your own damage costs two working cards. Repairing one card for somebody else costs one. The rules deliberately make mutual repair cheaper than isolated recovery.
 
@@ -316,7 +316,7 @@ Damage spreads through dependencies. A badly damaged office becomes reluctant or
 
 ---
 
-## 10. Cash, Love and Control
+## Cash, Love and Control
 
 The three dials show Disney's shared health.
 
@@ -334,7 +334,7 @@ The dials force value choices. Protecting one may damage another. The problem is
 
 ---
 
-## 11. The ten offices in the room
+## The ten offices in the room
 
 The following is the public trading map. It tells you what each office can supply and what it is normally trying to obtain.
 
@@ -357,7 +357,7 @@ Do not reduce the room to “money versus creativity.” Four different fault li
 
 ---
 
-## 12. The ten outside offices
+## The ten outside offices
 
 One chair plays all ten outside offices. Write an outside person's name on a Directive or say aloud that you need that office. Because every Directive requires an outside person, needing an outsider often means first needing the colleague who controls the route to them.
 
@@ -403,7 +403,7 @@ The Raider holds nothing Disney needs. It is an investor seeking board seats and
 
 ---
 
-## 13. Ambitions, rivals and the Finale
+## Ambitions, rivals and the Finale
 
 Each office wants one verifiable outcome at the Finale and races one rival over the same visible object. These ambitions are openly printed so other people can make offers against them.
 
@@ -434,7 +434,7 @@ A Monthly Close happens ten times and reports one simulated month. The **Finale*
 
 ---
 
-## 14. When you are stuck
+## When you are stuck
 
 ### Someone asks for your signature
 
@@ -478,11 +478,10 @@ Say so and point to the default. Explain why accepting that consequence is prefe
 
 ---
 
-## 15. What good play looks like
+## What good play looks like
 
 Know three things about your office: what you control, what you lack and who holds it. Walk towards those people. Say the price of your yes aloud. Use the four questions on people who sound more confident than you. File imperfect Directives instead of mistaking conversation for progress.
 
 Your first attempts will be wrong. A Directive will be returned. You may sign something too cheaply. You may resent somebody who was simply protecting their function. Those are not departures from the game; they are how the game teaches itself.
 
 Remember the first sentence: **nobody in this room can finish anything alone. That is not the obstacle. That is the game.**
-
