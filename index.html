@@ -1,64 +1,410 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Delegate-facing rules for The Disney Machine executive-table simulation.">
-  <title>The Disney Machine — Delegate Rules</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/docsify@4/lib/themes/vue.css">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A local, single-file dais console for The Disney Machine.">
+  <title>Dais Console</title>
   <style>
     :root {
-      --theme-color: #274690;
-      --content-max-width: 860px;
+      --ink: #f5f1e7; --muted: #aaa79f; --paper: #171717; --panel: #22211f;
+      --line: #3d3a35; --gold: #e9bd58; --gold-2: #8f6d24; --red: #ed625e;
+      --green: #72c48f; --shadow: 0 12px 35px rgba(0, 0, 0, .28);
     }
-    body { color: #20242b; }
-    .markdown-section { max-width: var(--content-max-width); padding: 30px 28px 80px; }
-    .markdown-section h1 { font-size: 2.35rem; line-height: 1.12; }
-    .markdown-section h2 { margin-top: 3rem; padding-top: .5rem; border-top: 1px solid #e7e9ee; }
-    .markdown-section h3 { margin-top: 2rem; }
-    .markdown-section blockquote {
-      color: #25314d;
-      background: #f3f6fc;
-      border-left: 4px solid var(--theme-color);
-      padding: .8rem 1.1rem;
-      margin: 1.2rem 0;
+    * { box-sizing: border-box; }
+    html { color-scheme: dark; }
+    body {
+      margin: 0; min-height: 100vh;
+      background: radial-gradient(circle at top right, rgba(233, 189, 88, .08), transparent 30rem), #111;
+      color: var(--ink); font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
-    .markdown-section table { display: block; width: 100%; overflow-x: auto; white-space: normal; }
-    .markdown-section th { white-space: nowrap; }
-    .markdown-section code { white-space: pre-wrap; }
-    .anchor span { color: inherit; }
-    @media (max-width: 600px) {
-      .markdown-section { padding: 22px 18px 64px; }
-      .markdown-section h1 { font-size: 1.9rem; }
-      .markdown-section h2 { font-size: 1.45rem; }
+    button, input, textarea, select { font: inherit; }
+    button {
+      border: 1px solid var(--line); border-radius: 10px; background: #302e2a; color: var(--ink);
+      padding: .7rem .9rem; cursor: pointer; transition: background .15s ease, border-color .15s ease, transform .08s ease;
     }
-    @media print {
-      .sidebar, .search, .github-corner { display: none !important; }
-      body { font-size: 11pt; }
-      .content { left: 0 !important; }
-      .markdown-section { max-width: none; padding: 0; }
-      a { color: inherit; text-decoration: none; }
+    button:hover { background: #3a3732; border-color: #5a554d; }
+    button:active { transform: translateY(1px); }
+    button:disabled { cursor: not-allowed; opacity: .42; }
+    .primary { background: var(--gold); border-color: var(--gold); color: #17120a; font-weight: 800; }
+    .primary:hover { background: #f2c96d; border-color: #f2c96d; }
+    .danger { background: #4b2423; border-color: #743936; color: #ffd6d4; }
+    .success { background: #1f4630; border-color: #326b49; color: #d6ffe4; }
+    .quiet { background: transparent; }
+    input, textarea, select {
+      width: 100%; border: 1px solid var(--line); border-radius: 10px; background: #121212;
+      color: var(--ink); padding: .75rem .85rem; outline: none;
     }
+    input:focus, textarea:focus, select:focus { border-color: var(--gold-2); box-shadow: 0 0 0 3px rgba(233, 189, 88, .09); }
+    textarea { resize: vertical; line-height: 1.45; }
+    .shell { max-width: 1540px; margin: 0 auto; padding: 1.2rem; }
+    .topbar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
+    .brand { display: flex; align-items: baseline; gap: .75rem; }
+    .brand h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp(1.55rem, 3vw, 2.25rem); font-weight: 600; }
+    .eyebrow { color: var(--gold); font-size: .73rem; font-weight: 900; letter-spacing: .14em; text-transform: uppercase; }
+    .top-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .55rem; }
+    .wall-state { align-self: center; color: var(--muted); font-size: .82rem; }
+    .wall-state.open { color: var(--green); }
+    .notice { display: none; margin-bottom: 1rem; border: 1px solid #735d29; border-radius: 10px; background: #322817; padding: .8rem 1rem; color: #ffe2a3; }
+    .notice.show { display: block; }
+    .control-grid { display: grid; grid-template-columns: minmax(280px, .78fr) minmax(430px, 1.25fr) minmax(360px, 1fr); gap: 1rem; align-items: start; }
+    .column { display: grid; gap: 1rem; }
+    .panel { border: 1px solid var(--line); border-radius: 16px; background: rgba(34, 33, 31, .96); box-shadow: var(--shadow); overflow: hidden; }
+    .panel-head { display: flex; justify-content: space-between; align-items: center; gap: .7rem; padding: .85rem 1rem; border-bottom: 1px solid var(--line); background: #1d1c1a; }
+    .panel-head h2 { margin: 0; font-size: .9rem; letter-spacing: .09em; text-transform: uppercase; }
+    .panel-body { padding: 1rem; }
+    .stack { display: grid; gap: .75rem; }
+    .month-row { display: grid; grid-template-columns: 1fr 7rem; gap: .7rem; align-items: end; }
+    .field label { display: block; margin-bottom: .38rem; color: var(--muted); font-size: .75rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+    .dial-control { display: grid; grid-template-columns: minmax(5rem, 1fr) 2.8rem 4.4rem 2.8rem; align-items: center; gap: .45rem; padding: .65rem; border: 1px solid var(--line); border-radius: 12px; background: #191816; }
+    .dial-control strong { font-size: .85rem; letter-spacing: .06em; }
+    .dial-control input { text-align: center; padding: .62rem .3rem; font-weight: 900; }
+    .dial-control button { padding: .62rem .3rem; font-size: 1rem; font-weight: 900; }
+    .dial-control.at-risk { border-color: #7b3633; background: #281918; }
+    .undo { width: 100%; min-height: 3.3rem; font-size: 1rem; font-weight: 900; letter-spacing: .04em; }
+    .queue-card { border: 1px solid var(--line); border-radius: 12px; background: #191816; padding: .85rem; }
+    .queue-card.crisis { border-color: #773431; background: #271817; }
+    .queue-card.resolved { opacity: .78; }
+    .queue-top { display: flex; align-items: center; justify-content: space-between; gap: .75rem; margin-bottom: .52rem; }
+    .queue-id { display: flex; align-items: center; gap: .5rem; font-weight: 900; }
+    .tag { display: inline-flex; align-items: center; border: 1px solid #534f48; border-radius: 999px; padding: .16rem .46rem; color: #d8d4cb; font-size: .66rem; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; }
+    .tag.crisis { border-color: #8b3f3a; color: #ffaaa6; }
+    .tag.live { border-color: #8a6e2d; color: #f2cc78; }
+    .tag.resolved { border-color: #326b49; color: #9ee0b4; }
+    .queue-card h3 { margin: 0 0 .45rem; font-family: Georgia, "Times New Roman", serif; font-size: 1.07rem; line-height: 1.25; }
+    .queue-card p { margin: .25rem 0; color: #d2cec5; font-size: .86rem; line-height: 1.38; }
+    .queue-card p strong { color: var(--ink); }
+    .queue-actions { display: flex; flex-wrap: wrap; gap: .42rem; margin-top: .7rem; }
+    .queue-actions button { padding: .5rem .62rem; font-size: .76rem; }
+    .outcome-grid { display: grid; gap: .48rem; margin-top: .8rem; }
+    .outcome-button { display: grid; grid-template-columns: 1fr auto; gap: .75rem; text-align: left; align-items: center; width: 100%; }
+    .outcome-button strong { display: block; font-size: .83rem; }
+    .outcome-button small { display: block; margin-top: .18rem; color: #c9c4ba; line-height: 1.25; }
+    .delta { white-space: nowrap; color: var(--gold); font-size: .75rem; font-weight: 900; }
+    .empty { padding: 1.1rem; border: 1px dashed #4b4842; border-radius: 12px; color: var(--muted); text-align: center; font-size: .86rem; }
+    .parse-help { color: var(--muted); font-size: .75rem; line-height: 1.45; }
+    .parse-help code { color: #f4d58e; }
+    .button-row { display: flex; flex-wrap: wrap; gap: .5rem; }
+    .button-row button { flex: 1 1 auto; }
+    .error-box { display: none; margin-top: .75rem; border: 1px solid #713532; border-radius: 10px; background: #2d1a19; color: #ffc2bf; padding: .7rem .8rem; font-size: .8rem; white-space: pre-wrap; }
+    .error-box.show { display: block; }
+    .footer { margin-top: 1rem; color: #77736c; text-align: center; font-size: .75rem; }
+    @media (max-width: 1120px) { .control-grid { grid-template-columns: minmax(280px, .8fr) minmax(430px, 1.2fr); } .compose-column { grid-column: 1 / -1; } }
+    @media (max-width: 760px) { .shell { padding: .75rem; } .topbar { align-items: flex-start; flex-direction: column; } .top-actions { justify-content: flex-start; } .control-grid { grid-template-columns: 1fr; } .compose-column { grid-column: auto; } }
   </style>
 </head>
 <body>
-  <div id="app">Loading the rules…</div>
+  <main id="control-app"></main>
   <script>
-    window.$docsify = {
-      name: 'The Disney Machine',
-      homepage: 'README.md',
-      auto2top: true,
-      subMaxLevel: 3,
-      maxLevel: 4,
-      search: {
-        placeholder: 'Search the rules',
-        noData: 'No matching rule found',
-        depth: 4
-      },
-      pagination: false
-    };
+    'use strict';
+    const STORAGE_KEY = 'disney-dais-console-v1';
+    const HISTORY_KEY = 'disney-dais-console-history-v1';
+    const GATE = 6, DIAL_MIN = 0, DIAL_MAX = 20, MAX_HISTORY = 40;
+    let wallWindow = null, takeoverTimer = null, notice = '';
+    let undoStack = loadUndoStack();
+    let state = loadState();
+
+    function freshState() { return { version: 1, month: 1, dials: { cash: 12, love: 10, control: 10 }, items: [], takeover: null, updatedAt: new Date().toISOString() }; }
+    function loadState() {
+      try { const raw = localStorage.getItem(STORAGE_KEY); return raw ? normalizeState(JSON.parse(raw)) : freshState(); }
+      catch (error) { notice = 'Saved state could not be read. A fresh console was opened; the damaged save was not overwritten until the next action.'; return freshState(); }
+    }
+    function loadUndoStack() { try { const raw = localStorage.getItem(HISTORY_KEY); return raw ? JSON.parse(raw) : []; } catch (error) { return []; } }
+    function normalizeState(input) {
+      const base = freshState(), candidate = input && input.state ? input.state : input;
+      if (!candidate || typeof candidate !== 'object') throw new Error('Invalid state');
+      base.month = clampInt(candidate.month, 1, 10, 1);
+      base.dials = {
+        cash: clampInt(candidate.dials && candidate.dials.cash, DIAL_MIN, DIAL_MAX, 12),
+        love: clampInt(candidate.dials && candidate.dials.love, DIAL_MIN, DIAL_MAX, 10),
+        control: clampInt(candidate.dials && candidate.dials.control, DIAL_MIN, DIAL_MAX, 10)
+      };
+      base.items = Array.isArray(candidate.items) ? candidate.items.map(normalizeItem) : [];
+      const ids = new Set();
+      for (const item of base.items) {
+        if (!item.id) throw new Error('An imported item has no ID.');
+        if (ids.has(item.id)) throw new Error(`Duplicate imported item ID ${item.id}.`);
+        if (!item.outcomes.length) throw new Error(`Imported item ${item.id} has no outcomes.`);
+        ids.add(item.id);
+      }
+      base.takeover = candidate.takeover && Number(candidate.takeover.expiresAt) > Date.now() ? candidate.takeover : null;
+      base.updatedAt = candidate.updatedAt || new Date().toISOString();
+      return base;
+    }
+    function normalizeItem(item) {
+      const statuses = ['held', 'upcoming', 'live', 'resolved'];
+      const type = item.type === 'crisis' || String(item.id || '').toUpperCase().startsWith('X') ? 'crisis' : 'calendar';
+      return {
+        id: String(item.id || '').trim().toUpperCase(), type, month: clampInt(item.month, 1, 10, 1),
+        owner: String(item.owner || '').trim(), situation: String(item.situation || '').trim(),
+        decide: String(item.decide || '').trim(), needs: String(item.needs || '').trim(), deadline: String(item.deadline || '').trim(),
+        outcomes: Array.isArray(item.outcomes) ? item.outcomes.map(normalizeOutcome) : [],
+        status: statuses.includes(item.status) ? item.status : (type === 'crisis' ? 'held' : 'upcoming'),
+        resolution: item.resolution || null, createdAt: item.createdAt || new Date().toISOString(), resolvedAt: item.resolvedAt || null
+      };
+    }
+    function normalizeOutcome(outcome) {
+      return {
+        label: String(outcome.label || '').trim(), consequence: String(outcome.consequence || outcome['public consequence'] || '').trim(),
+        cash: clampInt(outcome.cash, -20, 20, 0), love: clampInt(outcome.love, -20, 20, 0), control: clampInt(outcome.control, -20, 20, 0)
+      };
+    }
+    function clampInt(value, min, max, fallback) { const parsed = Number.parseInt(value, 10); return Number.isFinite(parsed) ? Math.min(max, Math.max(min, parsed)) : fallback; }
+    function snapshot() { const copy = structuredClone(state); copy.takeover = null; return copy; }
+    function commit(mutator, options = {}) {
+      if (options.record !== false) { undoStack.push(snapshot()); if (undoStack.length > MAX_HISTORY) undoStack.shift(); }
+      mutator(state); state.updatedAt = new Date().toISOString(); persist(); renderAll();
+    }
+    function persist() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); localStorage.setItem(HISTORY_KEY, JSON.stringify(undoStack)); }
+    function undo() { if (!undoStack.length) return; state = normalizeState(undoStack.pop()); state.takeover = null; persist(); renderAll(); }
+    function escapeHtml(value) { return String(value == null ? '' : value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#039;'); }
+    function signed(value) { const number = Number(value) || 0; return number > 0 ? `+${number}` : String(number); }
+    function deltaSummary(outcome, long = false) {
+      const parts = [];
+      if (outcome.cash) parts.push(`${long ? 'Cash ' : 'C '}${signed(outcome.cash)}`);
+      if (outcome.love) parts.push(`${long ? 'Love ' : 'L '}${signed(outcome.love)}`);
+      if (outcome.control) parts.push(`${long ? 'Control ' : 'K '}${signed(outcome.control)}`);
+      return parts.length ? parts.join(' · ') : 'No dial movement';
+    }
+    function getItems(status) { return state.items.filter(item => item.status === status).sort((a, b) => a.month - b.month || a.id.localeCompare(b.id)); }
+    function findItem(id) { return state.items.find(item => item.id === id); }
+
+    function renderControl() {
+      const root = document.getElementById('control-app');
+      const held = getItems('held'), upcoming = getItems('upcoming'), live = getItems('live');
+      const resolved = getItems('resolved').sort((a, b) => String(b.resolvedAt).localeCompare(String(a.resolvedAt))).slice(0, 12);
+      root.innerHTML = `
+        <div class="shell">
+          <header class="topbar">
+            <div class="brand"><span class="eyebrow">The Disney Machine</span><h1>Dais Console</h1></div>
+            <div class="top-actions">
+              <span id="wall-status" class="wall-state ${wallWindow && !wallWindow.closed ? 'open' : ''}">${wallWindow && !wallWindow.closed ? 'Wall open' : 'Wall closed'}</span>
+              <button data-action="open-wall" class="primary">Open wall</button>
+              <button data-action="export">Export JSON</button>
+              <button data-action="import-trigger">Import JSON</button>
+              <input id="import-file" type="file" accept="application/json,.json" hidden>
+            </div>
+          </header>
+          <div class="notice ${notice ? 'show' : ''}">${escapeHtml(notice)}</div>
+          <section class="control-grid">
+            <div class="column">
+              <section class="panel"><div class="panel-head"><h2>Game state</h2><span class="tag">Gate ${GATE}</span></div><div class="panel-body stack">
+                <div class="month-row"><div class="field"><label for="month-input">Simulated month</label><input id="month-input" data-action="set-month" type="number" min="1" max="10" value="${state.month}"></div><div class="eyebrow">of 10</div></div>
+                ${dialControl('cash', 'Cash')}${dialControl('love', 'Love')}${dialControl('control', 'Control')}
+                <button data-action="undo" class="undo danger" ${undoStack.length ? '' : 'disabled'}>UNDO LAST ACTION</button>
+                <div class="parse-help">${undoStack.length} reversible action${undoStack.length === 1 ? '' : 's'} available. Manual dial changes are the escape hatch for discounts, corrections, and unsettled rules.</div>
+              </div></section>
+              <section class="panel"><div class="panel-head"><h2>Held crises</h2><span class="tag">${held.length}</span></div><div class="panel-body stack">${held.length ? held.map(controlItemCard).join('') : empty('No held crises.')}</div></section>
+              <section class="panel"><div class="panel-head"><h2>Resolved</h2><span class="tag">${getItems('resolved').length}</span></div><div class="panel-body stack">${resolved.length ? resolved.map(controlItemCard).join('') : empty('Nothing resolved yet.')}</div></section>
+            </div>
+            <div class="column">
+              <section class="panel"><div class="panel-head"><h2>Live</h2><span class="tag live">${live.length}</span></div><div class="panel-body stack">${live.length ? live.map(controlItemCard).join('') : empty('No live items. Promote an upcoming item or fire a held crisis.')}</div></section>
+              <section class="panel"><div class="panel-head"><h2>Upcoming</h2><span class="tag">${upcoming.length}</span></div><div class="panel-body stack">${upcoming.length ? upcoming.map(controlItemCard).join('') : empty('No upcoming calendar items.')}</div></section>
+            </div>
+            <div class="column compose-column">
+              <section class="panel"><div class="panel-head"><h2>Compose one item</h2><span class="tag">Pipe format</span></div><div class="panel-body stack">
+                <textarea id="compose-input" rows="8" spellcheck="false" placeholder="C17 | M4 | Lock the December window | OWNER Bergman | NEEDS Feige, Johnston | DEADLINE End of M4 | A Cash route, Feige loses the slot, -1/0/0 | DEFAULT the date slips, 0/-2/0"></textarea>
+                <div class="button-row"><button data-action="add-compose" data-status="upcoming" class="success">Add Upcoming</button><button data-action="add-compose" data-status="held">Add Held</button><button data-action="add-compose" data-status="live" class="primary">Push Live</button></div>
+                <div class="parse-help">Calendar IDs normally begin with C; crisis IDs begin with X. Optional fields are <code>DECIDE</code> and <code>DEADLINE</code>. Duplicate any item below to load a complete editable line here.</div>
+                <div id="compose-errors" class="error-box"></div>
+              </div></section>
+              <section class="panel"><div class="panel-head"><h2>Bulk paste</h2><span class="tag">One item per line</span></div><div class="panel-body stack">
+                <textarea id="bulk-input" rows="12" spellcheck="false" placeholder="Paste a full comses here. Calendar items become Upcoming; crises become Held."></textarea>
+                <button data-action="add-bulk" class="primary">Add batch</button><div id="bulk-errors" class="error-box"></div>
+              </div></section>
+              <section class="panel"><div class="panel-head"><h2>Format</h2></div><div class="panel-body parse-help">
+                ID | M# | situation | OWNER name | DECIDE decision | NEEDS names | DEADLINE text | outcome label, public consequence, Cash/Love/Control<br><br>
+                Example outcome: <code>A Cash route, Feige loses the slot, -1/0/0</code><br>Example default: <code>DEFAULT the date slips, 0/-2/0</code>
+              </div></section>
+            </div>
+          </section>
+          <div class="footer">Everything stays in this browser unless you export it. Last saved ${escapeHtml(new Date(state.updatedAt).toLocaleString())}.</div>
+        </div>`;
+    }
+    function dialControl(key, label) {
+      const value = state.dials[key];
+      return `<div class="dial-control ${value <= GATE ? 'at-risk' : ''}"><strong>${label}</strong><button data-action="nudge-dial" data-dial="${key}" data-amount="-1" aria-label="Decrease ${label}">−</button><input data-action="edit-dial" data-dial="${key}" type="number" min="${DIAL_MIN}" max="${DIAL_MAX}" value="${value}" aria-label="${label} value"><button data-action="nudge-dial" data-dial="${key}" data-amount="1" aria-label="Increase ${label}">+</button></div>`;
+    }
+    function controlItemCard(item) {
+      const crisis = item.type === 'crisis', resolution = item.resolution;
+      return `<article class="queue-card ${crisis ? 'crisis' : ''} ${item.status === 'resolved' ? 'resolved' : ''}">
+        <div class="queue-top"><div class="queue-id">${escapeHtml(item.id)} <span class="tag ${crisis ? 'crisis' : ''}">${crisis ? 'Crisis' : `M${item.month}`}</span></div><span class="tag ${item.status}">${escapeHtml(item.status)}</span></div>
+        <h3>${escapeHtml(item.situation)}</h3>
+        ${item.owner ? `<p><strong>Owner:</strong> ${escapeHtml(item.owner)}</p>` : ''}${item.decide ? `<p><strong>Decide:</strong> ${escapeHtml(item.decide)}</p>` : ''}${item.needs ? `<p><strong>Needs:</strong> ${escapeHtml(item.needs)}</p>` : ''}${item.deadline ? `<p><strong>Deadline:</strong> ${escapeHtml(item.deadline)}</p>` : ''}
+        ${resolution ? `<p><strong>${escapeHtml(resolution.label)}:</strong> ${escapeHtml(resolution.consequence)} · ${escapeHtml(deltaSummary(resolution, true))}</p>` : ''}
+        ${item.status === 'live' ? `<div class="outcome-grid">${item.outcomes.map((outcome, index) => `<button class="outcome-button" data-action="resolve" data-id="${escapeHtml(item.id)}" data-outcome="${index}"><span><strong>${escapeHtml(outcome.label)}</strong><small>${escapeHtml(outcome.consequence)}</small></span><span class="delta">${escapeHtml(deltaSummary(outcome))}</span></button>`).join('')}</div>` : ''}
+        <div class="queue-actions">${item.status === 'held' || item.status === 'upcoming' ? `<button data-action="go-live" data-id="${escapeHtml(item.id)}" class="success">Go live</button>` : ''}<button data-action="duplicate" data-id="${escapeHtml(item.id)}">Duplicate & edit</button>${item.status !== 'resolved' ? `<button data-action="delete" data-id="${escapeHtml(item.id)}" class="quiet">Delete</button>` : ''}</div>
+      </article>`;
+    }
+    function empty(message) { return `<div class="empty">${escapeHtml(message)}</div>`; }
+
+    function wallShell() {
+      return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Disney Dais Wall</title><style>
+        :root { --ink:#f8f4e9; --muted:#aaa59b; --gold:#e9bd58; --red:#ee625e; --green:#72c48f; --line:#403d37; }
+        * { box-sizing:border-box; } html,body { margin:0; min-height:100%; background:#10100f; color:var(--ink); font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; overflow-x:hidden; }
+        body { background:radial-gradient(circle at top right,rgba(233,189,88,.1),transparent 32rem),#10100f; } #wall-app { min-height:100vh; } .wall { min-height:100vh; padding:2.4vh 2.2vw 4vh; }
+        .mast { display:flex; align-items:flex-end; justify-content:space-between; gap:2vw; margin-bottom:2vh; } .brand { color:var(--gold); font-size:1.2vw; font-weight:900; letter-spacing:.14em; text-transform:uppercase; } .month { font-family:Georgia,"Times New Roman",serif; font-size:2.9vw; }
+        .dials { display:grid; grid-template-columns:repeat(3,1fr); gap:1.2vw; margin-bottom:2.1vh; } .dial { border:1px solid var(--line); border-radius:1.1vw; background:#211f1c; padding:1.1vw 1.35vw; box-shadow:0 1.2vw 3vw rgba(0,0,0,.25); } .dial.risk { border-color:#8d3f3b; background:#2a1b19; }
+        .dial-top { display:flex; align-items:baseline; justify-content:space-between; } .dial-name { font-size:1vw; font-weight:900; letter-spacing:.12em; text-transform:uppercase; } .dial-number { font-family:Georgia,"Times New Roman",serif; font-size:3.3vw; line-height:1; }
+        .meter { position:relative; height:.7vw; margin-top:.9vw; border-radius:999px; background:#0d0d0c; overflow:visible; } .fill { height:100%; border-radius:999px; background:linear-gradient(90deg,#8c6720,var(--gold)); } .gate { position:absolute; left:30%; top:-.42vw; height:1.55vw; width:.14vw; background:var(--red); } .gate-label { position:absolute; left:30%; top:.93vw; transform:translateX(-50%); color:#e99a96; font-size:.63vw; font-weight:900; letter-spacing:.08em; text-transform:uppercase; }
+        .section-title { display:flex; align-items:center; gap:.8vw; margin:2vh 0 1vh; color:#d9d4ca; font-size:.85vw; font-weight:900; letter-spacing:.13em; text-transform:uppercase; } .section-title:after { content:""; flex:1; height:1px; background:var(--line); }
+        .live-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(31vw,1fr)); gap:1.1vw; } .item { border:1px solid var(--line); border-radius:1vw; background:#211f1c; padding:1.1vw 1.25vw; } .item.crisis { border:2px solid #9a423e; background:linear-gradient(145deg,#351b1a,#211817); }
+        .item-top { display:flex; justify-content:space-between; align-items:center; gap:1vw; margin-bottom:.55vw; } .item-id { font-size:1vw; font-weight:950; letter-spacing:.08em; } .flag { border:1px solid #57524a; border-radius:999px; padding:.2vw .55vw; color:#d4d0c7; font-size:.67vw; font-weight:900; letter-spacing:.08em; text-transform:uppercase; } .flag.crisis { border-color:#a74a45; color:#ffaaa5; }
+        .item h2 { margin:.2vw 0 .65vw; font-family:Georgia,"Times New Roman",serif; font-size:1.55vw; line-height:1.16; font-weight:600; } .item p { margin:.28vw 0; color:#d2cdc3; font-size:.93vw; line-height:1.28; } .item strong { color:var(--ink); }
+        .wall-outcomes { display:grid; grid-template-columns:repeat(auto-fit,minmax(12vw,1fr)); gap:.55vw; margin-top:.8vw; } .wall-outcome { border:1px solid #48443e; border-radius:.65vw; background:#171614; padding:.55vw .65vw; } .wall-outcome strong { display:block; font-size:.8vw; } .wall-outcome span { display:block; margin-top:.16vw; color:#bdb8ae; font-size:.69vw; line-height:1.25; } .wall-outcome em { display:block; margin-top:.3vw; color:var(--gold); font-size:.68vw; font-style:normal; font-weight:900; }
+        .upcoming-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(27vw,1fr)); gap:.8vw; } .upcoming { border:1px solid #38352f; border-radius:.75vw; background:#181715; padding:.72vw .85vw; } .upcoming > strong { font-size:.82vw; } .upcoming p { margin:.3vw 0 0; color:#b7b2a8; font-size:.73vw; line-height:1.25; } .upcoming-outcomes { display:flex; flex-wrap:wrap; gap:.3vw; margin-top:.48vw; } .upcoming-outcome { border:1px solid #3f3b35; border-radius:999px; padding:.2vw .46vw; color:#aaa59c; font-size:.62vw; } .upcoming-outcome strong { color:#d8d3ca; }
+        .resolved-list { display:flex; flex-wrap:wrap; gap:.55vw; } .resolved { border-left:.25vw solid var(--green); background:#191917; padding:.45vw .7vw; color:#bdb8ae; font-size:.7vw; } .empty { border:1px dashed #48443e; border-radius:.8vw; padding:1.4vw; color:#837f77; text-align:center; font-size:.9vw; }
+        .takeover { position:fixed; inset:0; z-index:10; display:grid; place-items:center; padding:5vw; background:rgba(8,8,7,.96); animation:arrive .22s ease-out; } .takeover-card { width:min(78vw,1200px); border:1px solid #6e5930; border-radius:1.5vw; background:linear-gradient(145deg,#28231a,#171614); box-shadow:0 3vw 8vw rgba(0,0,0,.55); padding:3.5vw; text-align:center; }
+        .takeover-label { color:var(--gold); font-size:1vw; font-weight:900; letter-spacing:.16em; text-transform:uppercase; } .takeover h1 { margin:1vw 0 .8vw; font-family:Georgia,"Times New Roman",serif; font-size:4vw; line-height:1.08; font-weight:600; } .takeover-consequence { color:#d7d2c7; font-size:1.7vw; } .takeover-delta { margin:1.4vw 0 .8vw; color:var(--gold); font-size:2.25vw; font-weight:950; } .takeover-now { color:#a9a49a; font-size:1.2vw; letter-spacing:.06em; }
+        @keyframes arrive { from { opacity:0; transform:scale(.985); } to { opacity:1; transform:scale(1); } }
+        @media (max-aspect-ratio:4/3) { .live-grid { grid-template-columns:1fr; } .item h2 { font-size:2vw; } .item p { font-size:1.2vw; } .wall-outcome strong { font-size:1vw; } .wall-outcome span,.wall-outcome em { font-size:.88vw; } }
+      </style></head><body><main id="wall-app"></main></body></html>`;
+    }
+    function openWall() {
+      wallWindow = window.open('', 'disney-dais-wall');
+      if (!wallWindow) { notice = 'The browser blocked the wall window. Allow pop-ups for this page, then press Open wall again.'; renderControl(); return; }
+      wallWindow.document.open(); wallWindow.document.write(wallShell()); wallWindow.document.close(); renderWall(); renderControl();
+    }
+    function renderWall() {
+      if (!wallWindow || wallWindow.closed) return;
+      const root = wallWindow.document.getElementById('wall-app'); if (!root) return;
+      const live = getItems('live'), upcoming = getItems('upcoming');
+      const resolved = getItems('resolved').sort((a, b) => String(b.resolvedAt).localeCompare(String(a.resolvedAt))).slice(0, 6);
+      const takeover = state.takeover && state.takeover.expiresAt > Date.now() ? state.takeover : null;
+      root.innerHTML = `<div class="wall">
+        <header class="mast"><div><div class="brand">The Disney Machine</div><div class="month">Month ${state.month} of 10</div></div><div class="brand">Gate at ${GATE}</div></header>
+        <section class="dials">${wallDial('Cash', state.dials.cash)}${wallDial('Love', state.dials.love)}${wallDial('Control', state.dials.control)}</section>
+        <div class="section-title">Live</div><section class="live-grid">${live.length ? live.map(wallLiveItem).join('') : '<div class="empty">No live items.</div>'}</section>
+        <div class="section-title">Read ahead</div><section class="upcoming-grid">${upcoming.length ? upcoming.map(wallUpcomingItem).join('') : '<div class="empty">No upcoming calendar items.</div>'}</section>
+        ${resolved.length ? `<div class="section-title">Recently resolved</div><section class="resolved-list">${resolved.map(wallResolvedItem).join('')}</section>` : ''}
+      </div>${takeover ? wallTakeover(takeover) : ''}`;
+    }
+    function wallDial(label, value) {
+      const width = Math.max(0, Math.min(100, value / DIAL_MAX * 100));
+      return `<article class="dial ${value <= GATE ? 'risk' : ''}"><div class="dial-top"><span class="dial-name">${label}</span><span class="dial-number">${value}</span></div><div class="meter"><div class="fill" style="width:${width}%"></div><div class="gate"></div><div class="gate-label">Gate ${GATE}</div></div></article>`;
+    }
+    function wallLiveItem(item) {
+      return `<article class="item ${item.type === 'crisis' ? 'crisis' : ''}"><div class="item-top"><span class="item-id">${escapeHtml(item.id)}</span><span class="flag ${item.type === 'crisis' ? 'crisis' : ''}">${item.type === 'crisis' ? 'Crisis' : `Month ${item.month}`}</span></div><h2>${escapeHtml(item.situation)}</h2>${item.owner ? `<p><strong>Owner:</strong> ${escapeHtml(item.owner)}</p>` : ''}${item.decide ? `<p><strong>Decide:</strong> ${escapeHtml(item.decide)}</p>` : ''}${item.needs ? `<p><strong>Needs:</strong> ${escapeHtml(item.needs)}</p>` : ''}${item.deadline ? `<p><strong>Deadline:</strong> ${escapeHtml(item.deadline)}</p>` : ''}<div class="wall-outcomes">${item.outcomes.map(outcome => `<div class="wall-outcome"><strong>${escapeHtml(outcome.label)}</strong><span>${escapeHtml(outcome.consequence)}</span><em>${escapeHtml(deltaSummary(outcome, true))}</em></div>`).join('')}</div></article>`;
+    }
+    function wallUpcomingItem(item) { return `<article class="upcoming"><strong>${escapeHtml(item.id)} · M${item.month} · ${escapeHtml(item.owner || 'Unassigned')}</strong><p>${escapeHtml(item.situation)}</p>${item.decide ? `<p><strong>Decide:</strong> ${escapeHtml(item.decide)}</p>` : ''}${item.needs ? `<p><strong>Needs:</strong> ${escapeHtml(item.needs)}</p>` : ''}${item.deadline ? `<p><strong>Deadline:</strong> ${escapeHtml(item.deadline)}</p>` : ''}<div class="upcoming-outcomes">${item.outcomes.map(outcome => `<span class="upcoming-outcome"><strong>${escapeHtml(outcome.label)}:</strong> ${escapeHtml(outcome.consequence)} · ${escapeHtml(deltaSummary(outcome, true))}</span>`).join('')}</div></article>`; }
+    function wallResolvedItem(item) { const resolution = item.resolution || {}; return `<div class="resolved"><strong>${escapeHtml(item.id)} · ${escapeHtml(resolution.label || 'Resolved')}</strong> — ${escapeHtml(resolution.consequence || '')}</div>`; }
+    function wallTakeover(takeover) { return `<section class="takeover"><div class="takeover-card"><div class="takeover-label">${escapeHtml(takeover.id)} resolved</div><h1>${escapeHtml(takeover.label)}</h1><div class="takeover-consequence">${escapeHtml(takeover.consequence)}</div><div class="takeover-delta">${escapeHtml(takeover.delta)}</div><div class="takeover-now">Now ${state.dials.cash} / ${state.dials.love} / ${state.dials.control}</div></div></section>`; }
+    function renderAll() { renderControl(); renderWall(); }
+
+    function parseItemLine(line, forcedStatus) {
+      const parts = line.split('|').map(part => part.trim()).filter(Boolean);
+      if (parts.length < 4) throw new Error('Expected at least ID | M# | situation | one outcome.');
+      const id = parts[0].toUpperCase();
+      if (!/^[A-Z][A-Z0-9_-]*$/.test(id)) throw new Error(`Invalid item ID "${parts[0]}".`);
+      const monthMatch = parts[1].match(/^M(?:ONTH\s*)?(\d{1,2})$/i);
+      if (!monthMatch) throw new Error(`Invalid month "${parts[1]}". Use M4.`);
+      const item = {
+        id, type: id.startsWith('X') ? 'crisis' : 'calendar', month: clampInt(monthMatch[1], 1, 10, 1),
+        owner: '', situation: stripField(parts[2], 'SITUATION'), decide: '', needs: '', deadline: '', outcomes: [],
+        status: forcedStatus || (id.startsWith('X') ? 'held' : 'upcoming'), resolution: null, createdAt: new Date().toISOString(), resolvedAt: null
+      };
+      for (const segment of parts.slice(3)) {
+        if (/^OWNER\b/i.test(segment)) item.owner = stripField(segment, 'OWNER');
+        else if (/^DECIDE\b/i.test(segment)) item.decide = stripField(segment, 'DECIDE');
+        else if (/^NEEDS\b/i.test(segment)) item.needs = stripField(segment, 'NEEDS');
+        else if (/^DEADLINE\b/i.test(segment)) item.deadline = stripField(segment, 'DEADLINE');
+        else item.outcomes.push(parseOutcome(segment));
+      }
+      if (!item.situation) throw new Error(`${id}: situation is empty.`);
+      if (!item.outcomes.length) throw new Error(`${id}: add at least one outcome ending in Cash/Love/Control, such as -1/0/0.`);
+      return normalizeItem(item);
+    }
+    function stripField(segment, key) { return segment.replace(new RegExp(`^${key}\\s*:?\\s*`, 'i'), '').trim(); }
+    function parseOutcome(segment) {
+      const deltaMatch = segment.match(/,?\s*([+-]?\d+)\s*\/\s*([+-]?\d+)\s*\/\s*([+-]?\d+)\s*$/);
+      if (!deltaMatch) throw new Error(`Outcome "${segment}" must end with Cash/Love/Control, for example -1/0/0.`);
+      const head = segment.slice(0, deltaMatch.index).replace(/,\s*$/, '').trim();
+      let label = '', consequence = '';
+      const firstComma = head.indexOf(',');
+      if (firstComma >= 0) { label = head.slice(0, firstComma).trim(); consequence = head.slice(firstComma + 1).trim(); }
+      else if (/^DEFAULT\b/i.test(head)) { label = 'DEFAULT'; consequence = head.replace(/^DEFAULT\s*/i, '').trim(); }
+      else { const words = head.split(/\s+/); label = words.shift() || 'OUTCOME'; consequence = words.join(' '); }
+      return normalizeOutcome({ label, consequence: consequence || label, cash: deltaMatch[1], love: deltaMatch[2], control: deltaMatch[3] });
+    }
+    function parseLines(text, forcedStatus, batchDefaults = false) {
+      const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean), items = [], errors = [];
+      const seen = new Set(state.items.map(item => item.id));
+      lines.forEach((line, index) => {
+        try {
+          const item = parseItemLine(line, batchDefaults ? undefined : forcedStatus);
+          if (seen.has(item.id)) throw new Error(`Duplicate ID ${item.id}.`);
+          if (items.some(existing => existing.id === item.id)) throw new Error(`Duplicate ID ${item.id} in this paste.`);
+          items.push(item);
+        } catch (error) { errors.push(`Line ${index + 1}: ${error.message}`); }
+      });
+      return { items, errors };
+    }
+    function serializeItem(item) {
+      const fields = [item.id, `M${item.month}`, item.situation, item.owner ? `OWNER ${item.owner}` : '', item.decide ? `DECIDE ${item.decide}` : '', item.needs ? `NEEDS ${item.needs}` : '', item.deadline ? `DEADLINE ${item.deadline}` : '', ...item.outcomes.map(outcome => `${outcome.label}, ${outcome.consequence}, ${outcome.cash}/${outcome.love}/${outcome.control}`)];
+      return fields.filter(Boolean).join(' | ');
+    }
+    function showErrors(errorId, errors) { const box = document.getElementById(errorId); if (!box) return; box.textContent = errors.join('\n'); box.classList.toggle('show', Boolean(errors.length)); }
+    function addParsedItems(text, forcedStatus, batchDefaults, errorId, inputId) {
+      const result = parseLines(text, forcedStatus, batchDefaults);
+      if (result.errors.length || !result.items.length) { showErrors(errorId, result.errors.length ? result.errors : ['Nothing to add.']); return; }
+      commit(current => { current.items.push(...result.items); });
+      const input = document.getElementById(inputId); if (input) input.value = '';
+      notice = `${result.items.length} item${result.items.length === 1 ? '' : 's'} added.`; renderAll();
+    }
+    function resolveItem(id, outcomeIndex) {
+      const item = findItem(id); if (!item || item.status !== 'live') return;
+      const outcome = item.outcomes[outcomeIndex]; if (!outcome) return;
+      if (!window.confirm(`Resolve ${item.id} as "${outcome.label}"?\n\n${outcome.consequence}\n${deltaSummary(outcome, true)}`)) return;
+      commit(current => {
+        const target = current.items.find(entry => entry.id === id);
+        current.dials.cash = clampInt(current.dials.cash + outcome.cash, DIAL_MIN, DIAL_MAX, current.dials.cash);
+        current.dials.love = clampInt(current.dials.love + outcome.love, DIAL_MIN, DIAL_MAX, current.dials.love);
+        current.dials.control = clampInt(current.dials.control + outcome.control, DIAL_MIN, DIAL_MAX, current.dials.control);
+        target.status = 'resolved'; target.resolution = structuredClone(outcome); target.resolvedAt = new Date().toISOString();
+        current.takeover = { id: target.id, label: outcome.label, consequence: outcome.consequence, delta: deltaSummary(outcome, true), expiresAt: Date.now() + 5000 };
+      });
+      clearTimeout(takeoverTimer);
+      takeoverTimer = setTimeout(() => { state.takeover = null; persist(); renderWall(); }, 5050);
+    }
+    function exportJson() {
+      const payload = { version: 1, exportedAt: new Date().toISOString(), state: snapshot() };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }), url = URL.createObjectURL(blob), anchor = document.createElement('a');
+      anchor.href = url; anchor.download = `dais-console-M${state.month}-${new Date().toISOString().slice(0, 10)}.json`; anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+    async function importJson(file) {
+      try {
+        const imported = normalizeState(JSON.parse(await file.text()));
+        if (!window.confirm(`Import this save?\n\nMonth ${imported.month}; ${imported.items.length} items. The current state can still be restored with Undo.`)) return;
+        undoStack.push(snapshot()); if (undoStack.length > MAX_HISTORY) undoStack.shift(); state = imported; state.takeover = null;
+        notice = `Imported ${imported.items.length} items.`; persist(); renderAll();
+      } catch (error) { notice = `Import failed: ${error.message}`; renderControl(); }
+    }
+
+    document.getElementById('control-app').addEventListener('click', event => {
+      const button = event.target.closest('[data-action]'); if (!button) return;
+      const action = button.dataset.action;
+      if (action === 'open-wall') openWall();
+      else if (action === 'undo') undo();
+      else if (action === 'export') exportJson();
+      else if (action === 'import-trigger') document.getElementById('import-file').click();
+      else if (action === 'nudge-dial') { const key = button.dataset.dial, amount = Number(button.dataset.amount); commit(current => { current.dials[key] = clampInt(current.dials[key] + amount, DIAL_MIN, DIAL_MAX, current.dials[key]); }); }
+      else if (action === 'go-live') commit(current => { const item = current.items.find(entry => entry.id === button.dataset.id); if (item) item.status = 'live'; });
+      else if (action === 'resolve') resolveItem(button.dataset.id, Number(button.dataset.outcome));
+      else if (action === 'duplicate') { const item = findItem(button.dataset.id); if (!item) return; const input = document.getElementById('compose-input'); input.value = serializeItem(item); input.focus(); input.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+      else if (action === 'delete') { const item = findItem(button.dataset.id); if (item && window.confirm(`Delete ${item.id}?`)) commit(current => { current.items = current.items.filter(entry => entry.id !== item.id); }); }
+      else if (action === 'add-compose') addParsedItems(document.getElementById('compose-input').value, button.dataset.status, false, 'compose-errors', 'compose-input');
+      else if (action === 'add-bulk') addParsedItems(document.getElementById('bulk-input').value, undefined, true, 'bulk-errors', 'bulk-input');
+    });
+    document.getElementById('control-app').addEventListener('change', event => {
+      const target = event.target, action = target.dataset.action;
+      if (action === 'set-month') { const value = clampInt(target.value, 1, 10, state.month); if (value !== state.month) commit(current => { current.month = value; }); }
+      else if (action === 'edit-dial') { const key = target.dataset.dial, value = clampInt(target.value, DIAL_MIN, DIAL_MAX, state.dials[key]); if (value !== state.dials[key]) commit(current => { current.dials[key] = value; }); }
+      else if (target.id === 'import-file' && target.files && target.files[0]) importJson(target.files[0]);
+    });
+    window.addEventListener('beforeunload', persist);
+    setInterval(() => { const status = document.getElementById('wall-status'); if (!status) return; const open = wallWindow && !wallWindow.closed; status.textContent = open ? 'Wall open' : 'Wall closed'; status.classList.toggle('open', Boolean(open)); }, 1000);
+    if (state.takeover && state.takeover.expiresAt > Date.now()) takeoverTimer = setTimeout(() => { state.takeover = null; persist(); renderWall(); }, state.takeover.expiresAt - Date.now());
+    renderControl();
   </script>
-  <script src="https://cdn.jsdelivr.net/npm/docsify@4/lib/docsify.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/docsify@4/lib/plugins/search.min.js"></script>
 </body>
 </html>
