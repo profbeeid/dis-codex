@@ -54,7 +54,11 @@
     .panel-head h2 { margin: 0; font-size: .9rem; letter-spacing: .09em; text-transform: uppercase; }
     .panel-body { padding: 1rem; }
     .stack { display: grid; gap: .75rem; }
-    .month-row { display: grid; grid-template-columns: 1fr 7rem; gap: .7rem; align-items: end; }
+    .clock-card { border: 1px solid #5a4825; border-radius: 12px; background: linear-gradient(145deg, #292216, #191816); padding: .9rem; }
+    .clock-date { margin: .15rem 0 .28rem; font-family: Georgia, "Times New Roman", serif; font-size: 1.65rem; line-height: 1.05; }
+    .clock-status { color: #e1c98f; font-size: .8rem; font-weight: 800; line-height: 1.35; }
+    .clock-meta { display: grid; gap: .25rem; margin-top: .65rem; color: var(--muted); font-size: .72rem; line-height: 1.35; }
+    .clock-actions { display: grid; margin-top: .75rem; }
     .field label { display: block; margin-bottom: .38rem; color: var(--muted); font-size: .75rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
     .dial-control { display: grid; grid-template-columns: minmax(5rem, 1fr) 2.8rem 4.4rem 2.8rem; align-items: center; gap: .45rem; padding: .65rem; border: 1px solid var(--line); border-radius: 12px; background: #191816; }
     .dial-control strong { font-size: .85rem; letter-spacing: .06em; }
@@ -100,11 +104,36 @@
     const STORAGE_KEY = 'disney-dais-console-v1';
     const HISTORY_KEY = 'disney-dais-console-history-v1';
     const GATE = 6, DIAL_MIN = 0, DIAL_MAX = 20, MAX_HISTORY = 40;
+    const DEFAULT_SIM_START = '2026-09-01';
+    const SESSION_WINDOWS = [
+      { id: 1, label: 'Committee Session 1', start: Date.parse('2026-09-05T10:30:00+07:00'), end: Date.parse('2026-09-05T13:00:00+07:00') },
+      { id: 2, label: 'Committee Session 2', start: Date.parse('2026-09-05T14:00:00+07:00'), end: Date.parse('2026-09-05T16:00:00+07:00') },
+      { id: 3, label: 'Committee Session 3', start: Date.parse('2026-09-05T16:30:00+07:00'), end: Date.parse('2026-09-05T18:00:00+07:00') },
+      { id: 4, label: 'Committee Session 4', start: Date.parse('2026-09-06T08:30:00+07:00'), end: Date.parse('2026-09-06T10:00:00+07:00') },
+      { id: 5, label: 'Committee Session 5', start: Date.parse('2026-09-06T10:15:00+07:00'), end: Date.parse('2026-09-06T12:00:00+07:00') },
+      { id: 6, label: 'Committee Session 6', start: Date.parse('2026-09-06T13:00:00+07:00'), end: Date.parse('2026-09-06T14:30:00+07:00') },
+      { id: 7, label: 'Committee Session 7', start: Date.parse('2026-09-06T14:45:00+07:00'), end: Date.parse('2026-09-06T15:45:00+07:00') }
+    ];
+    const TOTAL_ACTIVE_MS = SESSION_WINDOWS.reduce((sum, session) => sum + session.end - session.start, 0);
     let wallWindow = null, takeoverTimer = null, notice = '';
     let undoStack = loadUndoStack();
     let state = loadState();
 
-    function freshState() { return { version: 1, month: 1, dials: { cash: 12, love: 10, control: 10 }, items: [], takeover: null, updatedAt: new Date().toISOString() }; }
+    function freshState() {
+      return {
+        version: 2,
+        month: 1,
+        dials: { cash: 12, love: 10, control: 10 },
+        clock: {
+          simStart: DEFAULT_SIM_START,
+          paused: false,
+          pauseStartedAt: null,
+          pauseScheduleElapsed: 0,
+          manualDelayMs: 0
+        },
+        items: [], takeover: null, updatedAt: new Date().toISOString()
+      };
+    }
     function loadState() {
       try { const raw = localStorage.getItem(STORAGE_KEY); return raw ? normalizeState(JSON.parse(raw)) : freshState(); }
       catch (error) { notice = 'Saved state could not be read. A fresh console was opened; the damaged save was not overwritten until the next action.'; return freshState(); }
@@ -118,6 +147,14 @@
         cash: clampInt(candidate.dials && candidate.dials.cash, DIAL_MIN, DIAL_MAX, 12),
         love: clampInt(candidate.dials && candidate.dials.love, DIAL_MIN, DIAL_MAX, 10),
         control: clampInt(candidate.dials && candidate.dials.control, DIAL_MIN, DIAL_MAX, 10)
+      };
+      const incomingClock = candidate.clock || {};
+      base.clock = {
+        simStart: validDateOnly(incomingClock.simStart) ? incomingClock.simStart : DEFAULT_SIM_START,
+        paused: Boolean(incomingClock.paused),
+        pauseStartedAt: Number.isFinite(Number(incomingClock.pauseStartedAt)) ? Number(incomingClock.pauseStartedAt) : null,
+        pauseScheduleElapsed: Math.max(0, Number(incomingClock.pauseScheduleElapsed) || 0),
+        manualDelayMs: Math.max(0, Number(incomingClock.manualDelayMs) || 0)
       };
       base.items = Array.isArray(candidate.items) ? candidate.items.map(normalizeItem) : [];
       const ids = new Set();
@@ -135,12 +172,14 @@
       const statuses = ['held', 'upcoming', 'live', 'resolved'];
       const type = item.type === 'crisis' || String(item.id || '').toUpperCase().startsWith('X') ? 'crisis' : 'calendar';
       return {
-        id: String(item.id || '').trim().toUpperCase(), type, month: clampInt(item.month, 1, 10, 1),
+        id: String(item.id || '').trim().toUpperCase(), type, month: clampInt(item.month, 1, 99, 1),
+        simDate: validDateOnly(item.simDate) ? item.simDate : null,
         owner: String(item.owner || '').trim(), situation: String(item.situation || '').trim(),
         decide: String(item.decide || '').trim(), needs: String(item.needs || '').trim(), deadline: String(item.deadline || '').trim(),
         outcomes: Array.isArray(item.outcomes) ? item.outcomes.map(normalizeOutcome) : [],
         status: statuses.includes(item.status) ? item.status : (type === 'crisis' ? 'held' : 'upcoming'),
-        resolution: item.resolution || null, createdAt: item.createdAt || new Date().toISOString(), resolvedAt: item.resolvedAt || null
+        resolution: item.resolution || null, createdAt: item.createdAt || new Date().toISOString(),
+        activatedAt: item.activatedAt || null, resolvedAt: item.resolvedAt || null
       };
     }
     function normalizeOutcome(outcome) {
@@ -150,6 +189,81 @@
       };
     }
     function clampInt(value, min, max, fallback) { const parsed = Number.parseInt(value, 10); return Number.isFinite(parsed) ? Math.min(max, Math.max(min, parsed)) : fallback; }
+    function validDateOnly(value) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value || ''))) return false;
+      const [year, month, day] = value.split('-').map(Number);
+      const date = new Date(Date.UTC(year, month - 1, day));
+      return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+    }
+    function dateOnlyMs(value) { return validDateOnly(value) ? Date.parse(`${value}T00:00:00Z`) : NaN; }
+    function addUtcMonths(startMs, amount) {
+      const source = new Date(startMs);
+      const target = new Date(Date.UTC(source.getUTCFullYear(), source.getUTCMonth() + amount, 1));
+      const lastDay = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
+      target.setUTCDate(Math.min(source.getUTCDate(), lastDay));
+      return target.getTime();
+    }
+    function scheduledActiveElapsed(now = Date.now()) {
+      return SESSION_WINDOWS.reduce((sum, session) => {
+        if (now <= session.start) return sum;
+        return sum + Math.max(0, Math.min(now, session.end) - session.start);
+      }, 0);
+    }
+    function effectiveActiveElapsed(now = Date.now()) {
+      const scheduled = state.clock.paused ? state.clock.pauseScheduleElapsed : scheduledActiveElapsed(now);
+      return Math.max(0, Math.min(TOTAL_ACTIVE_MS, scheduled - state.clock.manualDelayMs));
+    }
+    function sessionAt(now = Date.now()) { return SESSION_WINDOWS.find(session => now >= session.start && now < session.end) || null; }
+    function nextSessionAfter(now = Date.now()) { return SESSION_WINDOWS.find(session => session.start > now) || null; }
+    function formatWib(timestamp, includeDate = true) {
+      const options = includeDate
+        ? { weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Jakarta', timeZoneName: 'short' }
+        : { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: 'Asia/Jakarta', timeZoneName: 'short' };
+      return new Intl.DateTimeFormat('en-GB', options).format(new Date(timestamp));
+    }
+    function formatDuration(milliseconds) {
+      const totalMinutes = Math.max(0, Math.ceil(milliseconds / 60000));
+      const hours = Math.floor(totalMinutes / 60), minutes = totalMinutes % 60;
+      return hours ? `${hours}h ${minutes}m` : `${minutes}m`;
+    }
+    function clockView(now = Date.now()) {
+      const elapsed = effectiveActiveElapsed(now);
+      const ratio = TOTAL_ACTIVE_MS ? elapsed / TOTAL_ACTIVE_MS : 0;
+      const startMs = dateOnlyMs(state.clock.simStart);
+      const simulatedMonths = elapsed / 3600000;
+      const fullMonths = Math.floor(simulatedMonths);
+      const monthFraction = simulatedMonths - fullMonths;
+      const monthStartMs = addUtcMonths(startMs, fullMonths);
+      const nextMonthMs = addUtcMonths(startMs, fullMonths + 1);
+      const simMs = monthStartMs + (nextMonthMs - monthStartMs) * monthFraction;
+      const simDate = new Date(simMs);
+      const simDateKey = [simDate.getUTCFullYear(), String(simDate.getUTCMonth() + 1).padStart(2, '0'), String(simDate.getUTCDate()).padStart(2, '0')].join('-');
+      const simDateLabel = new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(simDate);
+      const monthNumber = fullMonths + 1;
+      const monthTotal = Math.ceil(TOTAL_ACTIVE_MS / 3600000);
+      const activeSession = sessionAt(now), nextSession = nextSessionAfter(now);
+      let status, nextLabel;
+      if (state.clock.paused) {
+        status = 'Manually paused';
+        nextLabel = 'Resume continues from this simulated date without jumping.';
+      } else if (activeSession) {
+        status = `${activeSession.label} · running`;
+        nextLabel = `Automatic break in ${formatDuration(activeSession.end - now)} at ${formatWib(activeSession.end)}.`;
+      } else if (now < SESSION_WINDOWS[0].start) {
+        status = 'Waiting for Committee Session 1';
+        nextLabel = `Starts automatically ${formatWib(SESSION_WINDOWS[0].start)}.`;
+      } else if (nextSession) {
+        status = 'Scheduled break · clock frozen';
+        nextLabel = `Resumes automatically ${formatWib(nextSession.start)}.`;
+      } else if (elapsed >= TOTAL_ACTIVE_MS) {
+        status = 'Simulation complete';
+        nextLabel = 'The final committee window has ended.';
+      } else {
+        status = 'Conference schedule ended · clock frozen';
+        nextLabel = 'Manual pauses left the simulation short of the full 11h 45m trajectory.';
+      }
+      return { elapsed, ratio, simulatedMonths, simMs, simDateKey, simDateLabel, monthNumber, monthTotal, status, nextLabel, activeSession };
+    }
     function snapshot() { const copy = structuredClone(state); copy.takeover = null; return copy; }
     function commit(mutator, options = {}) {
       if (options.record !== false) { undoStack.push(snapshot()); if (undoStack.length > MAX_HISTORY) undoStack.shift(); }
@@ -166,13 +280,25 @@
       if (outcome.control) parts.push(`${long ? 'Control ' : 'K '}${signed(outcome.control)}`);
       return parts.length ? parts.join(' · ') : 'No dial movement';
     }
-    function getItems(status) { return state.items.filter(item => item.status === status).sort((a, b) => a.month - b.month || a.id.localeCompare(b.id)); }
+    function formatDateKey(value) {
+      if (!validDateOnly(value)) return '';
+      return new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' }).format(new Date(dateOnlyMs(value)));
+    }
+    function getItems(status) {
+      return state.items.filter(item => item.status === status).sort((a, b) => {
+        if (a.simDate && b.simDate) return a.simDate.localeCompare(b.simDate) || a.id.localeCompare(b.id);
+        if (a.simDate) return -1;
+        if (b.simDate) return 1;
+        return a.month - b.month || a.id.localeCompare(b.id);
+      });
+    }
     function findItem(id) { return state.items.find(item => item.id === id); }
 
     function renderControl() {
       const root = document.getElementById('control-app');
       const held = getItems('held'), upcoming = getItems('upcoming'), live = getItems('live');
       const resolved = getItems('resolved').sort((a, b) => String(b.resolvedAt).localeCompare(String(a.resolvedAt))).slice(0, 12);
+      const clock = clockView();
       root.innerHTML = `
         <div class="shell">
           <header class="topbar">
@@ -188,8 +314,21 @@
           <div class="notice ${notice ? 'show' : ''}">${escapeHtml(notice)}</div>
           <section class="control-grid">
             <div class="column">
-              <section class="panel"><div class="panel-head"><h2>Game state</h2><span class="tag">Gate ${GATE}</span></div><div class="panel-body stack">
-                <div class="month-row"><div class="field"><label for="month-input">Simulated month</label><input id="month-input" data-action="set-month" type="number" min="1" max="10" value="${state.month}"></div><div class="eyebrow">of 10</div></div>
+              <section class="panel"><div class="panel-head"><h2>Simulation clock</h2><span class="tag">1 real hour = 1 month</span></div><div class="panel-body stack">
+                <div class="clock-card">
+                  <div class="eyebrow">Simulated date · Month <span id="control-sim-month">${clock.monthNumber}</span> of ${clock.monthTotal}</div>
+                  <div id="control-sim-date" class="clock-date">${escapeHtml(clock.simDateLabel)}</div>
+                  <div id="control-clock-status" class="clock-status">${escapeHtml(clock.status)}</div>
+                  <div class="clock-meta">
+                    <span id="control-real-time">System clock: ${escapeHtml(formatWib(Date.now(), false))}</span>
+                    <span id="control-next-time">${escapeHtml(clock.nextLabel)}</span>
+                  </div>
+                  <div class="clock-actions"><button id="clock-toggle" data-action="toggle-clock" class="${state.clock.paused ? 'success' : 'danger'}">${state.clock.paused ? 'RESUME CLOCK' : 'PAUSE CLOCK'}</button></div>
+                </div>
+                <div class="field"><label for="sim-start-input">Simulated start date</label><input id="sim-start-input" data-action="set-sim-start" type="date" value="${escapeHtml(state.clock.simStart)}"></div>
+                <div class="parse-help">The clock runs only inside the seven Secretariat committee windows in WIB. Coffee, lunch, overnight, and free time freeze automatically. Manual Pause excludes only active committee minutes, so Resume never jumps forward.</div>
+              </div></section>
+              <section class="panel"><div class="panel-head"><h2>Dials</h2><span class="tag">Gate ${GATE}</span></div><div class="panel-body stack">
                 ${dialControl('cash', 'Cash')}${dialControl('love', 'Love')}${dialControl('control', 'Control')}
                 <button data-action="undo" class="undo danger" ${undoStack.length ? '' : 'disabled'}>UNDO LAST ACTION</button>
                 <div class="parse-help">${undoStack.length} reversible action${undoStack.length === 1 ? '' : 's'} available. Manual dial changes are the escape hatch for discounts, corrections, and unsettled rules.</div>
@@ -203,9 +342,9 @@
             </div>
             <div class="column compose-column">
               <section class="panel"><div class="panel-head"><h2>Compose one item</h2><span class="tag">Pipe format</span></div><div class="panel-body stack">
-                <textarea id="compose-input" rows="8" spellcheck="false" placeholder="C17 | M4 | Lock the December window | OWNER Bergman | NEEDS Feige, Johnston | DEADLINE End of M4 | A Cash route, Feige loses the slot, -1/0/0 | DEFAULT the date slips, 0/-2/0"></textarea>
+                <textarea id="compose-input" rows="8" spellcheck="false" placeholder="C17 | 15 December 2026 | Lock the December window | OWNER Bergman | NEEDS Feige, Johnston | DEADLINE End of day | A Cash route, Feige loses the slot, -1/0/0 | DEFAULT the date slips, 0/-2/0"></textarea>
                 <div class="button-row"><button data-action="add-compose" data-status="upcoming" class="success">Add Upcoming</button><button data-action="add-compose" data-status="held">Add Held</button><button data-action="add-compose" data-status="live" class="primary">Push Live</button></div>
-                <div class="parse-help">Calendar IDs normally begin with C; crisis IDs begin with X. Optional fields are <code>DECIDE</code> and <code>DEADLINE</code>. Duplicate any item below to load a complete editable line here.</div>
+                <div class="parse-help">Use an exact simulated date to trigger automatically. Calendar IDs normally begin with C; crisis IDs begin with X. Legacy <code>M4</code> lines still work but remain manual. Optional fields are <code>DECIDE</code> and <code>DEADLINE</code>.</div>
                 <div id="compose-errors" class="error-box"></div>
               </div></section>
               <section class="panel"><div class="panel-head"><h2>Bulk paste</h2><span class="tag">One item per line</span></div><div class="panel-body stack">
@@ -213,7 +352,8 @@
                 <button data-action="add-bulk" class="primary">Add batch</button><div id="bulk-errors" class="error-box"></div>
               </div></section>
               <section class="panel"><div class="panel-head"><h2>Format</h2></div><div class="panel-body parse-help">
-                ID | M# | situation | OWNER name | DECIDE decision | NEEDS names | DEADLINE text | outcome label, public consequence, Cash/Love/Control<br><br>
+                ID | DD Month YYYY | situation | OWNER name | DECIDE decision | NEEDS names | DEADLINE text | outcome label, public consequence, Cash/Love/Control<br><br>
+                Dated example: <code>C17 | 15 December 2026 | ...</code><br>
                 Example outcome: <code>A Cash route, Feige loses the slot, -1/0/0</code><br>Example default: <code>DEFAULT the date slips, 0/-2/0</code>
               </div></section>
             </div>
@@ -228,7 +368,7 @@
     function controlItemCard(item) {
       const crisis = item.type === 'crisis', resolution = item.resolution;
       return `<article class="queue-card ${crisis ? 'crisis' : ''} ${item.status === 'resolved' ? 'resolved' : ''}">
-        <div class="queue-top"><div class="queue-id">${escapeHtml(item.id)} <span class="tag ${crisis ? 'crisis' : ''}">${crisis ? 'Crisis' : `M${item.month}`}</span></div><span class="tag ${item.status}">${escapeHtml(item.status)}</span></div>
+        <div class="queue-top"><div class="queue-id">${escapeHtml(item.id)} <span class="tag ${crisis ? 'crisis' : ''}">${crisis ? 'Crisis' : (item.simDate ? escapeHtml(formatDateKey(item.simDate)) : `M${item.month}`)}</span>${crisis && item.simDate ? `<span class="tag">${escapeHtml(formatDateKey(item.simDate))}</span>` : ''}</div><span class="tag ${item.status}">${escapeHtml(item.status)}</span></div>
         <h3>${escapeHtml(item.situation)}</h3>
         ${item.owner ? `<p><strong>Owner:</strong> ${escapeHtml(item.owner)}</p>` : ''}${item.decide ? `<p><strong>Decide:</strong> ${escapeHtml(item.decide)}</p>` : ''}${item.needs ? `<p><strong>Needs:</strong> ${escapeHtml(item.needs)}</p>` : ''}${item.deadline ? `<p><strong>Deadline:</strong> ${escapeHtml(item.deadline)}</p>` : ''}
         ${resolution ? `<p><strong>${escapeHtml(resolution.label)}:</strong> ${escapeHtml(resolution.consequence)} · ${escapeHtml(deltaSummary(resolution, true))}</p>` : ''}
@@ -243,7 +383,7 @@
         :root { --ink:#f8f4e9; --muted:#aaa59b; --gold:#e9bd58; --red:#ee625e; --green:#72c48f; --line:#403d37; }
         * { box-sizing:border-box; } html,body { margin:0; min-height:100%; background:#10100f; color:var(--ink); font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; overflow-x:hidden; }
         body { background:radial-gradient(circle at top right,rgba(233,189,88,.1),transparent 32rem),#10100f; } #wall-app { min-height:100vh; } .wall { min-height:100vh; padding:2.4vh 2.2vw 4vh; }
-        .mast { display:flex; align-items:flex-end; justify-content:space-between; gap:2vw; margin-bottom:2vh; } .brand { color:var(--gold); font-size:1.2vw; font-weight:900; letter-spacing:.14em; text-transform:uppercase; } .month { font-family:Georgia,"Times New Roman",serif; font-size:2.9vw; }
+        .mast { display:flex; align-items:flex-end; justify-content:space-between; gap:2vw; margin-bottom:2vh; } .brand { color:var(--gold); font-size:1.2vw; font-weight:900; letter-spacing:.14em; text-transform:uppercase; } .wall-status { margin-top:.45vw; color:#aaa59b; font-size:.82vw; font-weight:700; } .sim-clock { text-align:right; } .sim-clock-label { color:#aaa59b; font-size:.68vw; font-weight:900; letter-spacing:.12em; text-transform:uppercase; } .sim-date { margin-top:.2vw; font-family:Georgia,"Times New Roman",serif; font-size:2.55vw; line-height:1; } .sim-month { margin-top:.38vw; color:var(--gold); font-size:.72vw; font-weight:900; letter-spacing:.08em; text-transform:uppercase; }
         .dials { display:grid; grid-template-columns:repeat(3,1fr); gap:1.2vw; margin-bottom:2.1vh; } .dial { border:1px solid var(--line); border-radius:1.1vw; background:#211f1c; padding:1.1vw 1.35vw; box-shadow:0 1.2vw 3vw rgba(0,0,0,.25); } .dial.risk { border-color:#8d3f3b; background:#2a1b19; }
         .dial-top { display:flex; align-items:baseline; justify-content:space-between; } .dial-name { font-size:1vw; font-weight:900; letter-spacing:.12em; text-transform:uppercase; } .dial-number { font-family:Georgia,"Times New Roman",serif; font-size:3.3vw; line-height:1; }
         .meter { position:relative; height:.7vw; margin-top:.9vw; border-radius:999px; background:#0d0d0c; overflow:visible; } .fill { height:100%; border-radius:999px; background:linear-gradient(90deg,#8c6720,var(--gold)); } .gate { position:absolute; left:30%; top:-.42vw; height:1.55vw; width:.14vw; background:var(--red); } .gate-label { position:absolute; left:30%; top:.93vw; transform:translateX(-50%); color:#e99a96; font-size:.63vw; font-weight:900; letter-spacing:.08em; text-transform:uppercase; }
@@ -271,8 +411,9 @@
       const live = getItems('live'), upcoming = getItems('upcoming');
       const resolved = getItems('resolved').sort((a, b) => String(b.resolvedAt).localeCompare(String(a.resolvedAt))).slice(0, 6);
       const takeover = state.takeover && state.takeover.expiresAt > Date.now() ? state.takeover : null;
+      const clock = clockView();
       root.innerHTML = `<div class="wall">
-        <header class="mast"><div><div class="brand">The Disney Machine</div><div class="month">Month ${state.month} of 10</div></div><div class="brand">Gate at ${GATE}</div></header>
+        <header class="mast"><div><div class="brand">The Disney Machine</div><div class="wall-status">${escapeHtml(clock.status)}</div></div><div class="sim-clock"><div class="sim-clock-label">Simulated date</div><div class="sim-date">${escapeHtml(clock.simDateLabel)}</div><div class="sim-month">Month ${clock.monthNumber} of ${clock.monthTotal} · Gate ${GATE}</div></div></header>
         <section class="dials">${wallDial('Cash', state.dials.cash)}${wallDial('Love', state.dials.love)}${wallDial('Control', state.dials.control)}</section>
         <div class="section-title">Live</div><section class="live-grid">${live.length ? live.map(wallLiveItem).join('') : '<div class="empty">No live items.</div>'}</section>
         <div class="section-title">Read ahead</div><section class="upcoming-grid">${upcoming.length ? upcoming.map(wallUpcomingItem).join('') : '<div class="empty">No upcoming calendar items.</div>'}</section>
@@ -284,22 +425,51 @@
       return `<article class="dial ${value <= GATE ? 'risk' : ''}"><div class="dial-top"><span class="dial-name">${label}</span><span class="dial-number">${value}</span></div><div class="meter"><div class="fill" style="width:${width}%"></div><div class="gate"></div><div class="gate-label">Gate ${GATE}</div></div></article>`;
     }
     function wallLiveItem(item) {
-      return `<article class="item ${item.type === 'crisis' ? 'crisis' : ''}"><div class="item-top"><span class="item-id">${escapeHtml(item.id)}</span><span class="flag ${item.type === 'crisis' ? 'crisis' : ''}">${item.type === 'crisis' ? 'Crisis' : `Month ${item.month}`}</span></div><h2>${escapeHtml(item.situation)}</h2>${item.owner ? `<p><strong>Owner:</strong> ${escapeHtml(item.owner)}</p>` : ''}${item.decide ? `<p><strong>Decide:</strong> ${escapeHtml(item.decide)}</p>` : ''}${item.needs ? `<p><strong>Needs:</strong> ${escapeHtml(item.needs)}</p>` : ''}${item.deadline ? `<p><strong>Deadline:</strong> ${escapeHtml(item.deadline)}</p>` : ''}<div class="wall-outcomes">${item.outcomes.map(outcome => `<div class="wall-outcome"><strong>${escapeHtml(outcome.label)}</strong><span>${escapeHtml(outcome.consequence)}</span><em>${escapeHtml(deltaSummary(outcome, true))}</em></div>`).join('')}</div></article>`;
+      const due = item.simDate ? formatDateKey(item.simDate) : `Month ${item.month}`;
+      return `<article class="item ${item.type === 'crisis' ? 'crisis' : ''}"><div class="item-top"><span class="item-id">${escapeHtml(item.id)}</span><span class="flag ${item.type === 'crisis' ? 'crisis' : ''}">${item.type === 'crisis' ? `Crisis · ${escapeHtml(due)}` : escapeHtml(due)}</span></div><h2>${escapeHtml(item.situation)}</h2>${item.owner ? `<p><strong>Owner:</strong> ${escapeHtml(item.owner)}</p>` : ''}${item.decide ? `<p><strong>Decide:</strong> ${escapeHtml(item.decide)}</p>` : ''}${item.needs ? `<p><strong>Needs:</strong> ${escapeHtml(item.needs)}</p>` : ''}${item.deadline ? `<p><strong>Deadline:</strong> ${escapeHtml(item.deadline)}</p>` : ''}<div class="wall-outcomes">${item.outcomes.map(outcome => `<div class="wall-outcome"><strong>${escapeHtml(outcome.label)}</strong><span>${escapeHtml(outcome.consequence)}</span><em>${escapeHtml(deltaSummary(outcome, true))}</em></div>`).join('')}</div></article>`;
     }
-    function wallUpcomingItem(item) { return `<article class="upcoming"><strong>${escapeHtml(item.id)} · M${item.month} · ${escapeHtml(item.owner || 'Unassigned')}</strong><p>${escapeHtml(item.situation)}</p>${item.decide ? `<p><strong>Decide:</strong> ${escapeHtml(item.decide)}</p>` : ''}${item.needs ? `<p><strong>Needs:</strong> ${escapeHtml(item.needs)}</p>` : ''}${item.deadline ? `<p><strong>Deadline:</strong> ${escapeHtml(item.deadline)}</p>` : ''}<div class="upcoming-outcomes">${item.outcomes.map(outcome => `<span class="upcoming-outcome"><strong>${escapeHtml(outcome.label)}:</strong> ${escapeHtml(outcome.consequence)} · ${escapeHtml(deltaSummary(outcome, true))}</span>`).join('')}</div></article>`; }
+    function wallUpcomingItem(item) { const due = item.simDate ? formatDateKey(item.simDate) : `M${item.month}`; return `<article class="upcoming"><strong>${escapeHtml(item.id)} · ${escapeHtml(due)} · ${escapeHtml(item.owner || 'Unassigned')}</strong><p>${escapeHtml(item.situation)}</p>${item.decide ? `<p><strong>Decide:</strong> ${escapeHtml(item.decide)}</p>` : ''}${item.needs ? `<p><strong>Needs:</strong> ${escapeHtml(item.needs)}</p>` : ''}${item.deadline ? `<p><strong>Deadline:</strong> ${escapeHtml(item.deadline)}</p>` : ''}<div class="upcoming-outcomes">${item.outcomes.map(outcome => `<span class="upcoming-outcome"><strong>${escapeHtml(outcome.label)}:</strong> ${escapeHtml(outcome.consequence)} · ${escapeHtml(deltaSummary(outcome, true))}</span>`).join('')}</div></article>`; }
     function wallResolvedItem(item) { const resolution = item.resolution || {}; return `<div class="resolved"><strong>${escapeHtml(item.id)} · ${escapeHtml(resolution.label || 'Resolved')}</strong> — ${escapeHtml(resolution.consequence || '')}</div>`; }
-    function wallTakeover(takeover) { return `<section class="takeover"><div class="takeover-card"><div class="takeover-label">${escapeHtml(takeover.id)} resolved</div><h1>${escapeHtml(takeover.label)}</h1><div class="takeover-consequence">${escapeHtml(takeover.consequence)}</div><div class="takeover-delta">${escapeHtml(takeover.delta)}</div><div class="takeover-now">Now ${state.dials.cash} / ${state.dials.love} / ${state.dials.control}</div></div></section>`; }
+    function wallTakeover(takeover) {
+      const activation = takeover.kind === 'activation';
+      const clock = clockView();
+      return `<section class="takeover"><div class="takeover-card"><div class="takeover-label">${escapeHtml(takeover.id)} ${activation ? 'triggered' : 'resolved'}</div><h1>${escapeHtml(takeover.label)}</h1><div class="takeover-consequence">${escapeHtml(takeover.consequence)}</div><div class="takeover-delta">${escapeHtml(takeover.delta)}</div><div class="takeover-now">${activation ? escapeHtml(clock.simDateLabel) : `Now ${state.dials.cash} / ${state.dials.love} / ${state.dials.control}`}</div></div></section>`;
+    }
     function renderAll() { renderControl(); renderWall(); }
 
+    function parseSimDateText(input) {
+      const value = String(input || '').trim();
+      if (validDateOnly(value)) return value;
+      let match = value.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+      let day, month, year;
+      if (match) {
+        day = Number(match[1]); month = Number(match[2]); year = Number(match[3]);
+      } else {
+        match = value.match(/^(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})$/);
+        if (!match) return null;
+        const months = { january:1, jan:1, february:2, feb:2, march:3, mar:3, april:4, apr:4, may:5, june:6, jun:6, july:7, jul:7, august:8, aug:8, september:9, sep:9, sept:9, october:10, oct:10, november:11, nov:11, december:12, dec:12 };
+        day = Number(match[1]); month = months[match[2].toLowerCase()]; year = Number(match[3]);
+        if (!month) return null;
+      }
+      const iso = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      return validDateOnly(iso) ? iso : null;
+    }
+    function monthNumberForDate(simDate) {
+      if (!validDateOnly(simDate)) return 1;
+      const start = new Date(dateOnlyMs(state.clock.simStart)), due = new Date(dateOnlyMs(simDate));
+      return Math.max(1, (due.getUTCFullYear() - start.getUTCFullYear()) * 12 + due.getUTCMonth() - start.getUTCMonth() + 1);
+    }
     function parseItemLine(line, forcedStatus) {
       const parts = line.split('|').map(part => part.trim()).filter(Boolean);
-      if (parts.length < 4) throw new Error('Expected at least ID | M# | situation | one outcome.');
+      if (parts.length < 4) throw new Error('Expected at least ID | simulated date | situation | one outcome.');
       const id = parts[0].toUpperCase();
       if (!/^[A-Z][A-Z0-9_-]*$/.test(id)) throw new Error(`Invalid item ID "${parts[0]}".`);
       const monthMatch = parts[1].match(/^M(?:ONTH\s*)?(\d{1,2})$/i);
-      if (!monthMatch) throw new Error(`Invalid month "${parts[1]}". Use M4.`);
+      const simDate = monthMatch ? null : parseSimDateText(parts[1]);
+      if (!monthMatch && !simDate) throw new Error(`Invalid simulated date "${parts[1]}". Use 15 December 2026, 15/12/2026, or legacy M4.`);
       const item = {
-        id, type: id.startsWith('X') ? 'crisis' : 'calendar', month: clampInt(monthMatch[1], 1, 10, 1),
+        id, type: id.startsWith('X') ? 'crisis' : 'calendar',
+        month: monthMatch ? clampInt(monthMatch[1], 1, 99, 1) : monthNumberForDate(simDate), simDate,
         owner: '', situation: stripField(parts[2], 'SITUATION'), decide: '', needs: '', deadline: '', outcomes: [],
         status: forcedStatus || (id.startsWith('X') ? 'held' : 'upcoming'), resolution: null, createdAt: new Date().toISOString(), resolvedAt: null
       };
@@ -340,7 +510,10 @@
       return { items, errors };
     }
     function serializeItem(item) {
-      const fields = [item.id, `M${item.month}`, item.situation, item.owner ? `OWNER ${item.owner}` : '', item.decide ? `DECIDE ${item.decide}` : '', item.needs ? `NEEDS ${item.needs}` : '', item.deadline ? `DEADLINE ${item.deadline}` : '', ...item.outcomes.map(outcome => `${outcome.label}, ${outcome.consequence}, ${outcome.cash}/${outcome.love}/${outcome.control}`)];
+      const due = item.simDate
+        ? new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(dateOnlyMs(item.simDate)))
+        : `M${item.month}`;
+      const fields = [item.id, due, item.situation, item.owner ? `OWNER ${item.owner}` : '', item.decide ? `DECIDE ${item.decide}` : '', item.needs ? `NEEDS ${item.needs}` : '', item.deadline ? `DEADLINE ${item.deadline}` : '', ...item.outcomes.map(outcome => `${outcome.label}, ${outcome.consequence}, ${outcome.cash}/${outcome.love}/${outcome.control}`)];
       return fields.filter(Boolean).join(' | ');
     }
     function showErrors(errorId, errors) { const box = document.getElementById(errorId); if (!box) return; box.textContent = errors.join('\n'); box.classList.toggle('show', Boolean(errors.length)); }
@@ -350,6 +523,71 @@
       commit(current => { current.items.push(...result.items); });
       const input = document.getElementById(inputId); if (input) input.value = '';
       notice = `${result.items.length} item${result.items.length === 1 ? '' : 's'} added.`; renderAll();
+    }
+    function toggleClock(now = Date.now()) {
+      commit(current => {
+        if (!current.clock.paused) {
+          current.clock.paused = true;
+          current.clock.pauseStartedAt = now;
+          current.clock.pauseScheduleElapsed = scheduledActiveElapsed(now);
+        } else {
+          const newlyPausedActiveMs = Math.max(0, scheduledActiveElapsed(now) - current.clock.pauseScheduleElapsed);
+          current.clock.manualDelayMs += newlyPausedActiveMs;
+          current.clock.paused = false;
+          current.clock.pauseStartedAt = null;
+          current.clock.pauseScheduleElapsed = 0;
+        }
+      });
+    }
+    function clearTakeoverAfterDelay() {
+      clearTimeout(takeoverTimer);
+      takeoverTimer = setTimeout(() => { state.takeover = null; persist(); renderWall(); }, 5050);
+    }
+    function autoActivateDueItems(now = Date.now()) {
+      if (state.clock.paused || now < SESSION_WINDOWS[0].start) return false;
+      const currentDate = clockView(now).simDateKey;
+      const due = state.items.filter(item => (item.status === 'held' || item.status === 'upcoming') && item.simDate && item.simDate <= currentDate);
+      if (!due.length) return false;
+      due.forEach(item => { item.status = 'live'; item.activatedAt = new Date(now).toISOString(); });
+      const crisis = due.find(item => item.type === 'crisis');
+      if (crisis && !(state.takeover && state.takeover.expiresAt > now)) {
+        state.takeover = {
+          kind: 'activation', id: crisis.id, label: 'CRISIS NOW LIVE', consequence: crisis.situation,
+          delta: formatDateKey(crisis.simDate), expiresAt: now + 5000
+        };
+        clearTakeoverAfterDelay();
+      }
+      state.updatedAt = new Date(now).toISOString();
+      persist(); renderAll();
+      return true;
+    }
+    function updateClockDisplays(now = Date.now()) {
+      const clock = clockView(now);
+      const values = {
+        'control-sim-date': clock.simDateLabel,
+        'control-sim-month': clock.monthNumber,
+        'control-clock-status': clock.status,
+        'control-real-time': `System clock: ${formatWib(now, false)}`,
+        'control-next-time': clock.nextLabel
+      };
+      Object.entries(values).forEach(([id, value]) => { const element = document.getElementById(id); if (element) element.textContent = value; });
+      const toggle = document.getElementById('clock-toggle');
+      if (toggle) {
+        toggle.textContent = state.clock.paused ? 'RESUME CLOCK' : 'PAUSE CLOCK';
+        toggle.classList.toggle('success', state.clock.paused);
+        toggle.classList.toggle('danger', !state.clock.paused);
+      }
+    }
+    function clockTick(now = Date.now()) {
+      const activated = autoActivateDueItems(now);
+      if (!activated) updateClockDisplays(now);
+      renderWall();
+      const status = document.getElementById('wall-status');
+      if (status) {
+        const open = wallWindow && !wallWindow.closed;
+        status.textContent = open ? 'Wall open' : 'Wall closed';
+        status.classList.toggle('open', Boolean(open));
+      }
     }
     function resolveItem(id, outcomeIndex) {
       const item = findItem(id); if (!item || item.status !== 'live') return;
@@ -361,20 +599,19 @@
         current.dials.love = clampInt(current.dials.love + outcome.love, DIAL_MIN, DIAL_MAX, current.dials.love);
         current.dials.control = clampInt(current.dials.control + outcome.control, DIAL_MIN, DIAL_MAX, current.dials.control);
         target.status = 'resolved'; target.resolution = structuredClone(outcome); target.resolvedAt = new Date().toISOString();
-        current.takeover = { id: target.id, label: outcome.label, consequence: outcome.consequence, delta: deltaSummary(outcome, true), expiresAt: Date.now() + 5000 };
+        current.takeover = { kind: 'resolution', id: target.id, label: outcome.label, consequence: outcome.consequence, delta: deltaSummary(outcome, true), expiresAt: Date.now() + 5000 };
       });
-      clearTimeout(takeoverTimer);
-      takeoverTimer = setTimeout(() => { state.takeover = null; persist(); renderWall(); }, 5050);
+      clearTakeoverAfterDelay();
     }
     function exportJson() {
-      const payload = { version: 1, exportedAt: new Date().toISOString(), state: snapshot() };
+      const payload = { version: 2, exportedAt: new Date().toISOString(), state: snapshot() };
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }), url = URL.createObjectURL(blob), anchor = document.createElement('a');
-      anchor.href = url; anchor.download = `dais-console-M${state.month}-${new Date().toISOString().slice(0, 10)}.json`; anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+      anchor.href = url; anchor.download = `dais-console-${clockView().simDateKey}-${new Date().toISOString().slice(0, 10)}.json`; anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
     async function importJson(file) {
       try {
         const imported = normalizeState(JSON.parse(await file.text()));
-        if (!window.confirm(`Import this save?\n\nMonth ${imported.month}; ${imported.items.length} items. The current state can still be restored with Undo.`)) return;
+        if (!window.confirm(`Import this save?\n\nSimulated start ${formatDateKey(imported.clock.simStart)}; ${imported.items.length} items. The current state can still be restored with Undo.`)) return;
         undoStack.push(snapshot()); if (undoStack.length > MAX_HISTORY) undoStack.shift(); state = imported; state.takeover = null;
         notice = `Imported ${imported.items.length} items.`; persist(); renderAll();
       } catch (error) { notice = `Import failed: ${error.message}`; renderControl(); }
@@ -384,6 +621,7 @@
       const button = event.target.closest('[data-action]'); if (!button) return;
       const action = button.dataset.action;
       if (action === 'open-wall') openWall();
+      else if (action === 'toggle-clock') toggleClock();
       else if (action === 'undo') undo();
       else if (action === 'export') exportJson();
       else if (action === 'import-trigger') document.getElementById('import-file').click();
@@ -397,14 +635,21 @@
     });
     document.getElementById('control-app').addEventListener('change', event => {
       const target = event.target, action = target.dataset.action;
-      if (action === 'set-month') { const value = clampInt(target.value, 1, 10, state.month); if (value !== state.month) commit(current => { current.month = value; }); }
+      if (action === 'set-sim-start') {
+        if (!validDateOnly(target.value)) { notice = 'Choose a valid simulated start date.'; renderControl(); return; }
+        if (target.value !== state.clock.simStart) commit(current => {
+          current.clock.simStart = target.value;
+          current.items.forEach(item => { if (item.simDate) item.month = monthNumberForDate(item.simDate); });
+        });
+      }
       else if (action === 'edit-dial') { const key = target.dataset.dial, value = clampInt(target.value, DIAL_MIN, DIAL_MAX, state.dials[key]); if (value !== state.dials[key]) commit(current => { current.dials[key] = value; }); }
       else if (target.id === 'import-file' && target.files && target.files[0]) importJson(target.files[0]);
     });
     window.addEventListener('beforeunload', persist);
-    setInterval(() => { const status = document.getElementById('wall-status'); if (!status) return; const open = wallWindow && !wallWindow.closed; status.textContent = open ? 'Wall open' : 'Wall closed'; status.classList.toggle('open', Boolean(open)); }, 1000);
+    setInterval(clockTick, 1000);
     if (state.takeover && state.takeover.expiresAt > Date.now()) takeoverTimer = setTimeout(() => { state.takeover = null; persist(); renderWall(); }, state.takeover.expiresAt - Date.now());
     renderControl();
+    clockTick();
   </script>
 </body>
 </html>
